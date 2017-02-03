@@ -1,0 +1,206 @@
+---
+title: "main.rmd"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(reshape2)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(grid)
+library(ggplot2)
+library(lattice)
+script.dir <- "E:/aaaaaaa/TechnikiWizualizacjiDanych/MINI_2016/Projekty/Projekt03/faza1/Dyszynski"
+okwest = as.data.frame(read.csv(paste(script.dir, "dane_kwestionariuszowe.csv", sep="/"), fileEncoding = "UTF-8"))
+obser = as.data.frame(read.csv(paste(script.dir, "dane_obserwacyjne.csv", sep="/"), fileEncoding = "UTF-8"))
+#obser = melt(obser, id.vars = c("ID", "ekspot", "czas_w_min", "czas_w_sek"), measure.vars=c("X1_OSTOW", "X2_OSTOW", #"X3_OSTOW", "X4_OSTOW", "X5_OSTOW", "X6_OSTOW", "X7_OSTOW", "X8_OSTOW", "X9_OSTOW"))
+
+#kwest = okwest[which(okwest$Plec==1),]
+kwest = okwest
+kwest$Plec <- as.factor(kwest$Plec)
+
+kwest["oceW"] = kwest["oceM"] + kwest["oceP"] + kwest["oceJP"]
+
+obs_times = obser %>%
+  group_by_(.dots=names(.)[c(2, 4)]) %>%
+  #group_by_(c("ID", "ekspot", "czas_w_min", "czas_w_sek")) %>%
+  summarise(czas_w_min = sum(czas_w_min), czas_w_sek = sum(czas_w_sek))
+
+obs_times_ekspot = obser %>%
+  group_by_(.dots=names(.)[c(2, 4)]) %>%
+  #group_by_(c("ID", "ekspot", "czas_w_min", "czas_w_sek")) %>%
+  summarise(czas_w_min = sum(czas_w_min), czas_w_sek = sum(czas_w_sek))
+
+obs_times_sum = obs_times %>%
+  group_by(ID) %>%
+  summarise(czas_w_min = sum(czas_w_min))
+obs_times_s = merge(obs_times_sum, kwest[, c("ID", "Plec", "oceW", "oceM", "oceP", "oceJP")], by="ID")
+
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+the_w = 5
+the_h = 5
+#, values = 0.01*c(0, 10, 30, 50, 100, 200, 800)
+#rbow = scale_fill_gradientn(colors = rainbow(7))
+rbow = scale_fill_distiller(palette = "Spectral")
+  #breaks = breaks, labels = c(1, 800), )
+```
+
+## Histogram: czas obserwacji w ogóle
+
+W skali logarytmicznej, rozk³ad ~normalny
+
+```{r obs, echo=FALSE, warning=FALSE}
+av = as.integer(mean(obs_times$czas_w_sek))
+ch_uwagi = ggplot(data=obs_times, aes(czas_w_sek, fill = ..count..)) +
+  geom_histogram(binwidth = 0.1) +
+  #scale_x_log10(breaks = c(0.33, 0.5, 1, 2, 3, 10, 20, av)) +
+  scale_x_log10(breaks = c(10, 20, 40, 160, av)) +
+  scale_fill_gradientn(colors = rainbow(7)) +
+  geom_vline(aes(xintercept=av)) + ylab("Liczba obserwacji") + xlab("Czas obserwacji (sekundy)") +
+  ggtitle(expression(atop(bold("Pojedyncza obserwacja")))) +
+  theme(plot.title = element_text(size = 18, face = "bold")) +
+  theme(legend.position="bottom") + labs(fill="Liczba obserwacji w przedziale") +
+  annotate("text", x = av, y = 800, label = "Œredni czas", hjust = -0.05)
+ggsave(file=paste(script.dir, "ch_uwagi.png", sep="/"), plot=ch_uwagi, width=the_w, height=the_h)
+ch_uwagi
+```
+
+## Histogram: czas obserwacji zjawiska
+
+W skali logarytmicznej, rozk³ad ~normalny
+
+```{r obs, echo=FALSE, warning=FALSE}
+av = as.integer(mean(obs_times_ekspot$czas_w_min))
+i_zjawiska = ggplot(data=obs_times_ekspot, aes(czas_w_min, fill = ..count..)) +
+  geom_histogram(binwidth = 0.1) +
+  scale_x_log10(breaks = c(1, 5, 10, 50, 100, av)) +
+  rbow +
+  geom_vline(aes(xintercept=av)) + ylab("Liczba eksponatów w przedziale") + xlab("Czas obserwacji (minuty)") +
+  ggtitle(expression(atop(bold("Wszystkie obserwacje eksponatu")))) +
+  theme(plot.title = element_text(size = 18, face = "bold")) +
+  theme(legend.position="bottom") + labs(fill="Liczba eksponatów w przedziale") +
+  annotate("text", x = av, y = 30, label = "Œredni czas", hjust = -0.05)
+ggsave(file=paste(script.dir, "i_zjawiska.png", sep="/"), plot=i_zjawiska, width=the_w, height=the_h)
+i_zjawiska
+```
+
+## Histogram: czas obserwacji przez dziecko
+
+```{r obs_s, echo=FALSE, warning=FALSE}
+obs_times_total = obs_times %>%
+  summarise(czas_w_min = sum(czas_w_min))
+av = as.integer(mean(obs_times_total$czas_w_min))
+
+z_dziecko = ggplot(data=obs_times_total, aes(czas_w_min, fill = ..count..)) + geom_histogram(binwidth = 5) +
+  rbow +
+  scale_x_continuous(breaks = c(av, 10*1:20)) +
+  geom_vline(aes(xintercept=av)) + ylab("Liczba dzieci") + xlab("Czas obserwacji (minuty)") +
+  ggtitle(expression(atop(bold("Wszystkie obserwacje przez dziecko")))) +
+  theme(plot.title = element_text(size = 18, face = "bold")) +
+  theme(legend.position="bottom") + labs(fill="Liczba dzieci w przedziale") +
+  annotate("text", x = av, y = 20, label = "Œredni czas", hjust = 1.04)
+ggsave(file=paste(script.dir, "z_dziecko.png", sep="/"), plot=z_dziecko, width=the_w, height=the_h)
+z_dziecko
+```
+
+## Histogram: czas obserwacji przez dziecko a ocena
+
+```{r obs_sum_ocena, echo=FALSE, warning=FALSE}
+mk_ocena = function(obs_m) {
+  cfs = coef(lm(czas_w_min ~ ocena, data = obs_m))
+  the_aes = aes(x = ocena, y = czas_w_min)
+  x_lim = xlim(2, 6)
+  y_lim = ylim(min(obs_m$czas_w_min), max(obs_m$czas_w_min))
+  lab = ylab("Œredni czas ogl¹dania (minuty)")
+  plec_skala = scale_colour_manual("Legenda",
+        breaks = c(1, 2),
+        labels = c("Dziewczynki", "Ch³opcy"),
+        values = c("Red", "Blue"))# + facet_wrap(~Plec)
+  
+  make_ab = function(obs, ...){
+    cfs = coef(lm(czas_w_min ~ ocena, data = obs))
+    geom_abline(intercept = cfs[1], slope = cfs[2], ...)
+  }
+  
+  plot_w_abline = function(obs){
+    cfs = coef(lm(czas_w_min ~ ocena, data = obs))
+    
+    ggplot(obs, the_aes) +
+      geom_jitter(aes(color = Plec), width = 0.25) +
+      make_ab(obs, color = "Black") +
+      #make_ab(filter(obs, Plec == 1), color = "Red") +
+      #make_ab(filter(obs, Plec == 2), color = "Blue") +
+      scale_x_discrete(breaks = 2:6) +
+      x_lim + y_lim + plec_skala + lab +
+        theme(legend.position="bottom",
+              legend.title=element_blank())
+  }
+  
+  plot_w_abline(obs_m)
+}
+
+#obs_times_s["czas_w_min"] = round(obs_times_s["czas_w_sek"] / 60)
+
+obs_jp = obs_times_s
+obs_jp["ocena"] = obs_jp["oceJP"]
+jp = mk_ocena(obs_jp) + xlab("Ocena z jêzyka Polskiego")
+jp
+
+obs_p = obs_times_s
+obs_p["ocena"] = obs_p["oceP"]
+p = mk_ocena(obs_p) + xlab("Ocena z przyrody")
+p
+
+obs_m = obs_times_s
+obs_m["ocena"] = obs_m["oceM"]
+m = mk_ocena(obs_m) + xlab("Ocena z matematyki")
+m
+
+ggsave(file=paste(script.dir, "jp.png", sep="/"), plot=jp, width=the_w, height=the_h)
+ggsave(file=paste(script.dir, "p.png", sep="/"), plot=p, width=the_w, height=the_h)
+ggsave(file=paste(script.dir, "m.png", sep="/"), plot=m, width=the_w, height=the_h)
+
+#both = plot_w_abline(obs_times_s)
+#female = plot_w_abline(obs_times_s[obs_times_s$Plec == 1,])
+#male = plot_w_abline(obs_times_s[obs_times_s$Plec == 2,])
+#multiplot(both, female, male, cols = 3)
+#grid.arrange(both, female, male, cols = 3)
+#both
+```
